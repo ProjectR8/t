@@ -138,8 +138,25 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && req.url === '/my-voices') {
+      const result = await forward(
+        'https://api.genvoice.ru/v1/api/voices',
+        'GET',
+        {
+          'Accept': 'application/json',
+          'Authorization': req.headers['authorization'] || ''
+        },
+        null
+      );
+      res.writeHead(result.status, {
+        'Content-Type': result.headers['content-type'] || 'application/json'
+      });
+      res.end(result.body);
+      return;
+    }
+
     res.writeHead(404);
-    res.end('Not found. Use GET /voices or POST /oauth, /chat, /tts');
+    res.end('Not found. Use GET /voices, GET /my-voices or POST /oauth, /chat, /tts');
   } catch (err) {
     res.writeHead(502);
     res.end(JSON.stringify({ error: String(err) }));
