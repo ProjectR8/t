@@ -103,8 +103,26 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'POST' && req.url === '/tts') {
+      const body = await readBody(req);
+      const result = await forward(
+        'https://api.genvoice.ru/v1/api/tts',
+        'POST',
+        {
+          'Content-Type': 'application/json',
+          'Authorization': req.headers['authorization'] || ''
+        },
+        body
+      );
+      res.writeHead(result.status, {
+        'Content-Type': result.headers['content-type'] || 'audio/mpeg'
+      });
+      res.end(result.body);
+      return;
+    }
+
     res.writeHead(404);
-    res.end('Not found. Use POST /oauth or POST /chat');
+    res.end('Not found. Use POST /oauth, /chat or /tts');
   } catch (err) {
     res.writeHead(502);
     res.end(JSON.stringify({ error: String(err) }));
