@@ -1,0 +1,13 @@
+{
+  "name": "gigachat-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Прокси-сервер для GigaChat API (обходит недоверенный сертификат Минцифры и добавляет CORS)",
+  "main": "gigachat-proxy.js",
+  "scripts": {
+    "start": "node gigachat-proxy.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
