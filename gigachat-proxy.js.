@@ -1,0 +1,116 @@
+// Прокси-сервер для GigaChat: берёт на себя недоверенный сертификат Минцифры
+// и добавляет CORS-заголовки, чтобы jarvis.html (на GitHub Pages) мог
+// стучаться сюда напрямую.
+//
+// Локальный запуск:  node gigachat-proxy.js
+// Деплой на Render.com: Start command = node gigachat-proxy.js
+// (слушает порт из process.env.PORT, как требует Render)
+
+const http = require('http');
+const https = require('https');
+
+const PORT = process.env.PORT || 8787;
+
+// Сертификат Сбера подписан НУЦ Минцифры, не входящим в стандартные
+// доверенные цепочки — поэтому здесь (и только здесь, на прокси-сервере)
+// отключаем проверку.
+const insecureAgent = new https.Agent({ rejectUnauthorized: false });
+
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, RqUID');
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    let chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
+
+function forward(targetUrl, method, headers, body) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(targetUrl);
+    const opts = {
+      hostname: u.hostname,
+      port: u.port || 443,
+      path: u.pathname + u.search,
+      method,
+      headers,
+      agent: insecureAgent
+    };
+    const proxyReq = https.request(opts, (proxyRes) => {
+      let chunks = [];
+      proxyRes.on('data', (c) => chunks.push(c));
+      proxyRes.on('end', () => {
+        resolve({
+          status: proxyRes.statusCode,
+          headers: proxyRes.headers,
+          body: Buffer.concat(chunks)
+        });
+      });
+    });
+    proxyReq.on('error', reject);
+    if (body && body.length) proxyReq.write(body);
+    proxyReq.end();
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  try {
+    if (req.method === 'POST' && req.url === '/oauth') {
+      const body = await readBody(req);
+      const result = await forward(
+        'https://ngw.devices.sberbank.ru:9443/api/v2/oauth',
+        'POST',
+        {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+          'RqUID': req.headers['rquid'] || '',
+          'Authorization': req.headers['authorization'] || ''
+        },
+        body
+      );
+      res.writeHead(result.status, { 'Content-Type': 'application/json' });
+      res.end(result.body);
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/chat') {
+      const body = await readBody(req);
+      const result = await forward(
+        'https://api.giga.chat/v1/chat/completions', // актуальный адрес с 17.07.2026
+        'POST',
+        {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': req.headers['authorization'] || ''
+        },
+        body
+      );
+      res.writeHead(result.status, { 'Content-Type': 'application/json' });
+      res.end(result.body);
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('Not found. Use POST /oauth or POST /chat');
+  } catch (err) {
+    res.writeHead(502);
+    res.end(JSON.stringify({ error: String(err) }));
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`GigaChat proxy running on port ${PORT}`);
+});
