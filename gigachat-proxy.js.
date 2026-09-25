@@ -155,8 +155,18 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && req.url.startsWith('/search')) {
+      const parsed = new URL('http://x' + req.url);
+      const q = parsed.searchParams.get('q') || '';
+      const target = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(q) + '&format=json&no_html=1&skip_disambig=1';
+      const result = await forward(target, 'GET', { 'Accept': 'application/json' }, null);
+      res.writeHead(result.status, { 'Content-Type': 'application/json' });
+      res.end(result.body);
+      return;
+    }
+
     res.writeHead(404);
-    res.end('Not found. Use GET /voices, GET /my-voices or POST /oauth, /chat, /tts');
+    res.end('Not found. Use GET /voices, /my-voices, /search or POST /oauth, /chat, /tts');
   } catch (err) {
     res.writeHead(502);
     res.end(JSON.stringify({ error: String(err) }));
