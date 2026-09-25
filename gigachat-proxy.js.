@@ -18,7 +18,7 @@ const insecureAgent = new https.Agent({ rejectUnauthorized: false });
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, RqUID');
 }
 
@@ -121,8 +121,25 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && req.url === '/voices') {
+      const result = await forward(
+        'https://api.genvoice.ru/v1/api/voices/public',
+        'GET',
+        {
+          'Accept': 'application/json',
+          'Authorization': req.headers['authorization'] || ''
+        },
+        null
+      );
+      res.writeHead(result.status, {
+        'Content-Type': result.headers['content-type'] || 'application/json'
+      });
+      res.end(result.body);
+      return;
+    }
+
     res.writeHead(404);
-    res.end('Not found. Use POST /oauth, /chat or /tts');
+    res.end('Not found. Use GET /voices or POST /oauth, /chat, /tts');
   } catch (err) {
     res.writeHead(502);
     res.end(JSON.stringify({ error: String(err) }));
